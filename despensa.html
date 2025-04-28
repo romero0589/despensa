@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Despensa Mejorado</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f0f2f5; }
+        h1 { text-align: center; }
+        form, .inventario, .filtros, .resumen { max-width: 700px; margin: 20px auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0px 0px 10px #bbb; }
+        input, select, button { width: 100%; padding: 10px; margin-top: 10px; border-radius: 5px; border: 1px solid #ccc; }
+        .producto { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee; }
+        .acciones button { margin-left: 5px; }
+        .alerta { color: red; font-weight: bold; }
+        .filtros select { margin-top: 0; }
+        .resumen { text-align: center; font-weight: bold; }
+        #exportar { margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<h1>Mi Despensa Mejorada</h1>
+
+<form id="formulario">
+    <input type="text" id="nombre" placeholder="Nombre del producto" required>
+    <select id="categoria">
+        <option value="Comida">Comida</option>
+        <option value="Aseo">Aseo</option>
+        <option value="Higiene personal">Higiene personal</option>
+        <option value="Otros">Otros</option>
+    </select>
+    <input type="number" id="cantidad" placeholder="Cantidad" required min="0">
+    <input type="text" id="unidad" placeholder="Unidad (kg, litro, unidad, etc.)" required>
+    <input type="date" id="caducidad" placeholder="Fecha de caducidad">
+    <button type="submit">Agregar producto</button>
+</form>
+
+<div class="filtros">
+    <label for="filtrarCategoria">Filtrar por categoría:</label>
+    <select id="filtrarCategoria">
+        <option value="Todas">Todas</option>
+        <option value="Comida">Comida</option>
+        <option value="Aseo">Aseo</option>
+        <option value="Higiene personal">Higiene personal</option>
+        <option value="Otros">Otros</option>
+    </select>
+    <button id="exportar">Exportar a Excel</button>
+</div>
+
+<div class="resumen" id="resumen"></div>
+
+<div class="inventario" id="inventario"></div>
+
+<script>
+    let productos = JSON.parse(localStorage.getItem('productos')) || [];
+
+    function guardarProductos() {
+        localStorage.setItem('productos', JSON.stringify(productos));
+    }
+
+    function mostrarProductos() {
+        const inventario = document.getElementById('inventario');
+        inventario.innerHTML = '';
+        const categoriaFiltro = document.getElementById('filtrarCategoria').value;
+
+        productos.forEach((producto, index) => {
+            if (categoriaFiltro !== 'Todas' && producto.categoria !== categoriaFiltro) return;
+
+            const div = document.createElement('div');
+            div.className = 'producto';
+            let alerta = '';
+
+            if (producto.cantidad <= 2) {
+                alerta = '<div class="alerta">Stock bajo!</div>';
+            }
+
+            if (producto.caducidad) {
+                const diasRestantes = Math.ceil((new Date(producto.caducidad) - new Date()) / (1000 * 60 * 60 * 24));
+                if (diasRestantes <= 5) {
+                    alerta += '<div class="alerta">¡Caduca pronto!</div>';
+                }
+            }
+
+            div.innerHTML = `
+                <div>
+                    <strong>${producto.nombre}</strong> (${producto.categoria})<br>
+                    ${producto.cantidad} ${producto.unidad}<br>
+                    ${producto.caducidad ? 'Caduca: ' + producto.caducidad : ''}
+                    ${alerta}
+                </div>
+                <div class="acciones">
+                    <button onclick="actualizarCantidad(${index}, 1)">+1</button>
+                    <button onclick="actualizarCantidad(${index}, -1)">-1</button>
+                    <button onclick="eliminarProducto(${index})">Eliminar</button>
+                </div>
+            `;
+            inventario.appendChild(div);
+        });
+
+        mostrarResumen();
+    }
+
+    function mostrarResumen() {
+        const resumen = document.getElementById('resumen');
+        const totalProductos = productos.length;
+        const categorias = {};
+
+        productos.forEach(p => {
+            categorias[p.categoria] = (categorias[p.categoria] || 0) + 1;
+        });
+
+        let resumenHTML = `Total de productos: ${totalProductos}<br>`;
+        for (let cat in categorias) {
+            resumenHTML += `${cat}: ${categorias[cat]}<br>`;
+        }
+
+        resumen.innerHTML = resumenHTML;
+    }
+
+    function actualizarCantidad(index, cambio) {
+        productos[index].cantidad += cambio;
+        if (productos[index].cantidad < 0) productos[index].cantidad = 0;
+        guardarProductos();
+        mostrarProductos();
+    }
+
+    function eliminarProducto(index) {
+        if (confirm('¿Estás seguro de eliminar este producto?')) {
+            productos.splice(index, 1);
+            guardarProductos();
+            mostrarProductos();
+        }
+    }
+
+    function exportarExcel() {
+        let csvContent = "data:text/csv;charset=utf-8,Nombre,Categoría,Cantidad,Unidad,Caducidad\n";
+
+        productos.forEach(p => {
+            csvContent += `${p.nombre},${p.categoria},${p.cantidad},${p.unidad},${p.caducidad || ''}\n`;
+        });
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", "inventario_despensa.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    document.getElementById('formulario').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const nombre = document.getElementById('nombre').value;
+        const categoria = document.getElementById('categoria').value;
+        const cantidad = parseInt(document.getElementById('cantidad').value);
+        const unidad = document.getElementById('unidad').value;
+        const caducidad = document.getElementById('caducidad').value;
+
+        productos.push({ nombre, categoria, cantidad, unidad, caducidad });
+        guardarProductos();
+        mostrarProductos();
+        this.reset();
+    });
+
+    document.getElementById('filtrarCategoria').addEventListener('change', mostrarProductos);
+    document.getElementById('exportar').addEventListener('click', exportarExcel);
+
+    mostrarProductos();
+</script>
+
+</body>
+</html>
